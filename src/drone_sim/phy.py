@@ -79,3 +79,12 @@ if __name__ == "__main__":
 
     drones = [drone1, drone2, drone3]
     run_simulation(drones, steps=5)
+    
+def sleep():
+    # have sleep only recive data from main drone
+
+
+# tree Tripology: batter comsumsion, what drone is conected with who
+# display distance with main drone and childern
+# reminder formation: V fomation, line formaiton, otional possible shapes
+# 
