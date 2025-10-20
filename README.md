@@ -1,6 +1,6 @@
 # CS576-Drone-Network
 Team members: Khoi Tran, Aiden Suarez, Aidan Baker, Niki Liao
-### Physical (PHY)
+### Physical (PHY) - Aiden Suarez
 - Realistic physical layer implementation is not required.
 - Tech profiles: Wi-Fi 802.11n/ac and Wi-Fi Direct (or 802.11s-like mesh), or custom radio:
 - Channel: Simply simulate data loss with a preset probability. 
@@ -16,7 +16,7 @@ Team members: Khoi Tran, Aiden Suarez, Aidan Baker, Niki Liao
 - 2D. Implement Random Waypoint (3D) and Leader–Follower/Formation.
 - Formation/topology event: at mid-run (e.g., t=300 s) switch formation or insert a relay/obstacle.
 - Logs: route churn, time-to-steady-state after the switch.
-### GUI - will be doing 2D - Khoi
+### GUI - will be doing 2D - Khoi Tran
 - Topology view (2D or 3D): UAV icons, link color by quality (optional), show per-UAV energy, route overlay for a selected flow.
 - Controls: start/pause/step/reset; seed; N× speed; button to trigger Formation Change.
 - Panels: live PDR/latency/jitter, queue sizes, energy/time series; export PNG/CSV.
