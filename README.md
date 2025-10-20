@@ -12,7 +12,7 @@ Team members: Khoi Tran, Aiden Suarez, Aidan Baker, Niki Liao
 - Study routing options, e.g., AODV/DSR (reactive) or OLSR (proactive).
 - Support recovery from disconnections and rediscovery (reactive) / table repair (proactive);
 - Implement buffering for disconnection tolerance (consider drop policy).
-### Mobility - Khoi
+### Mobility - Niki Liao
 - 2D. Implement Random Waypoint (3D) and Leader–Follower/Formation.
 - Formation/topology event: at mid-run (e.g., t=300 s) switch formation or insert a relay/obstacle.
 - Logs: route churn, time-to-steady-state after the switch.
