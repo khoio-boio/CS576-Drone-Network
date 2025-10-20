@@ -84,7 +84,7 @@ def sleep():
     # have sleep only recive data from main drone
 
 
-# tree Tripology: batter comsumsion, what drone is conected with who
+# tree Topology: battery comsumption, what drone is conected with who
 # display distance with main drone and childern
-# reminder formation: V fomation, line formaiton, otional possible shapes
-# 
+# formations: grid / square formation, V fomation, line formaiton, optional possible shapes
+
