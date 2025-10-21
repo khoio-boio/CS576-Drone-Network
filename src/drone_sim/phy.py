@@ -79,8 +79,8 @@ if __name__ == "__main__":
 
     drones = [drone1, drone2, drone3]
     run_simulation(drones, steps=5)
-    
-def sleep():
+
+# def sleep():
     # have sleep only recive data from main drone
 
 
