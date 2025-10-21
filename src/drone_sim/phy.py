@@ -87,4 +87,7 @@ def sleep():
 # tree Topology: battery comsumption, what drone is conected with who
 # display distance with main drone and childern
 # formations: grid / square formation, V fomation, line formaiton, optional possible shapes
+# need to add: speed (m/s), velocity (vx, vy), power profile, online boolean (true if battery has charge)
+# for linking: neighbors, parent_id, children
+# for formation and control: role (leader/follower), formation offset, speed scale - global scale speed added to individual drone speed
 
