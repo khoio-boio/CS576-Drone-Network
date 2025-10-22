@@ -21,7 +21,7 @@ def _rotate(x: float, y: float, degrees: float) -> Vector:
     rad = math.radians(degrees)
     cos = math.cos(rad)
     sin = math.sin(rad)
-    return (cos * x - sin * x, cos * x + sin * x)
+    return (cos*x - sin*y, sin*x + cos*y)
 
 # Simple2D kinematics with speed and acceleration caps and motion energy draw
 class Mobility2D:    

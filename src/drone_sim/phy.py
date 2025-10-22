@@ -19,6 +19,8 @@ power_profile = {
 # Basic drone structure
 class Drone:
     def __init__(self, drone_id, x, y, comm_profile, energy=5000):
+        self.v = (0.0, 0.0, 0.0)   # (vx, vy, vz)
+        self.alt = 0.0
         self.id = drone_id
         self.position = (x, y)
         self.comm_profile = comm_profile
