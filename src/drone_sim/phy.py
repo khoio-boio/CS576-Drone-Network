@@ -116,6 +116,24 @@ class Drone:
                 f"| Role: {self.role} | Pos: ({self.position[0]:.1f}, {self.position[1]:.1f})")
 
 # ==========================================================
+# RSSI + SNR Based Link Quality Estimator
+# ==========================================================
+def estimate_rssi(distance, tx_power_dbm, path_loss_exp=2.2):
+    if distance < 1:
+        distance = 1
+    pl = 40 + 10 * path_loss_exp * math.log10(distance)
+    return tx_power_dbm - pl
+
+def estimate_snr(rssi_dbm, noise_floor_dbm=-90):
+    return rssi_dbm - noise_floor_dbm
+
+def link_quality_metric(distance, tx_power):
+    rssi = estimate_rssi(distance, tx_power)
+    snr = estimate_snr(rssi)
+    snr = max(-10, min(snr, 40))
+    return max(0.0, min(1.0, (snr + 10) / 50))
+
+# ==========================================================
 # Simulate a Lossy Channel (PHY)
 # ==========================================================
 def simulate_packet_loss(distance, max_range, base_loss=0.1):
@@ -206,8 +224,35 @@ def assign_formation(drones, formation="line", spacing=50):
             d.formation_offset = offset
 
 # ==========================================================
+# Dynamic Leader Handoff
+# ==========================================================
+def dynamic_leader_handoff(drones, battery_threshold=300):
+    leader = drones[0]
+
+    if leader.energy > battery_threshold and len(leader.neighbors) >= 1:
+        return  # no handoff
+
+    print("\n[Leader Handoff Triggered] Leader too weak or disconnected")
+
+    candidates = [d for d in drones if d.online]
+    candidates.sort(key=lambda d: (d.energy, len(d.neighbors)), reverse=True)
+
+    new_leader = candidates[0]
+    idx_old = drones.index(leader)
+    idx_new = drones.index(new_leader)
+
+    drones[idx_old], drones[idx_new] = drones[idx_new], drones[idx_old]
+
+    drones[0].role = "leader"
+    for d in drones[1:]:
+        d.role = "follower"
+
+    print(f"[Leader Handoff] New leader is Drone {drones[0].id}")
+
+# ==========================================================
 # Network Simulation Loop
 # ==========================================================
+
 def run_simulation(drones, steps=10, dt=1.0):
     # Initial neighbor discovery
     for d in drones:
@@ -263,14 +308,14 @@ def run_simulation(drones, steps=10, dt=1.0):
 # Example Usage (Static + Formation Example)
 # ==========================================================
 if __name__ == "__main__":
-    drone1 = Drone(1, 0, 0, "802.11ac")
-    drone2 = Drone(2, 50, 0, "802.11ac")
-    drone3 = Drone(3, 100, 0, "802.11ac")
-    drone4 = Drone(4, 150, 0, "802.11ac")
+    N = 12  # scalable to 100+
+    drones = []
 
-    drones = [drone1, drone2, drone3, drone4]
-    assign_formation(drones, formation="v", spacing=60)
-    run_simulation(drones, steps=8, dt=1.0)
+    for i in range(N):
+        drones.append(Drone(i + 1, i * 20, 0, "802.11ac"))
+
+    assign_formation(drones, formation="v", spacing=50)
+    run_simulation(drones, steps=12, dt=1.0)
 
 # ==========================================================
 # Future / To-Do Notes (kept and extended)
@@ -304,6 +349,8 @@ if __name__ == "__main__":
 #
 # Next Steps (Recommended):
 #   - Add dynamic leader handoff
-#   - Add altitude (z) and 3D path loss
-#   - Add visualization (matplotlib/networkx)
 #   - Integrate control laws for formation stability
+#   - ability to handle 100 drones / choose the amount needed.
+#
+# New Next Step:
+#   - Add dynamic link-quality estimator (RSSI/SNR model)
