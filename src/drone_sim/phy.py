@@ -348,9 +348,5 @@ if __name__ == "__main__":
 #   - Basic mobility and formation control
 #
 # Next Steps (Recommended):
-#   - Add dynamic leader handoff
-#   - Integrate control laws for formation stability
-#   - ability to handle 100 drones / choose the amount needed.
-#
-# New Next Step:
 #   - Add dynamic link-quality estimator (RSSI/SNR model)
+
