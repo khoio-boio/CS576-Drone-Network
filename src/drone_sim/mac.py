@@ -64,16 +64,16 @@ class NeighborEntry:
         self.link_quality = link_quality  # 0.0 to 1.0
         self.expired = False
 
-    def update(self, link_quality: float = None):
+    def update(self, current_time: float, link_quality: float = None):
         """Update last seen time and optionally link quality"""
-        self.last_seen = time.time()
+        self.last_seen = current_time
         if link_quality is not None:
             self.link_quality = link_quality
         self.expired = False
 
-    def check_expiry(self, expiry_time: float):
+    def check_expiry(self, current_time: float, expiry_time: float):
         """Check if entry has expired"""
-        if time.time() - self.last_seen > expiry_time:
+        if current_time - self.last_seen > expiry_time:
             self.expired = True
         return self.expired
 
@@ -115,6 +115,7 @@ class MACLayer:
         self.state = MACState.IDLE
         self.current_packet: Optional[MACPacket] = None
         self.pending_ack: Optional[MACPacket] = None
+        self.pending_ack_to_send: Optional[MACPacket] = None  # ACK waiting to be sent
         self.ack_timer: float = 0.0
         self.sensing_timer: float = 0.0
         self.backoff_timer: float = 0.0
@@ -258,7 +259,7 @@ class MACLayer:
             if packet.src_id not in self.neighbor_table:
                 self.neighbor_table[packet.src_id] = NeighborEntry(packet.src_id, current_time)
             else:
-                self.neighbor_table[packet.src_id].update()
+                self.neighbor_table[packet.src_id].update(current_time)
             return True
             
         elif packet.packet_type == PacketType.RTS:
@@ -290,7 +291,8 @@ class MACLayer:
                 
                 # Send ACK (will be handled in step function)
                 ack = self.send_ack(packet.src_id, packet.seq_num, current_time)
-                # Note: ACK will be transmitted in next step
+                # Store ACK to be sent in next step
+                self.pending_ack_to_send = ack
                 return True
             return False
             
@@ -313,7 +315,7 @@ class MACLayer:
         """Update neighbor table and remove expired entries"""
         expired_ids = []
         for neighbor_id, entry in self.neighbor_table.items():
-            if entry.check_expiry(self.neighbor_expiry):
+            if entry.check_expiry(current_time, self.neighbor_expiry):
                 expired_ids.append(neighbor_id)
         
         for neighbor_id in expired_ids:
@@ -331,6 +333,11 @@ class MACLayer:
         
         # Update neighbor table expiry
         self.update_neighbor_table(current_time)
+        
+        # Send pending ACK if available
+        if self.pending_ack_to_send and self.state == MACState.IDLE:
+            packets_to_transmit.append(self.pending_ack_to_send)
+            self.pending_ack_to_send = None
         
         # Send beacon if interval elapsed
         if current_time - self.last_beacon_time >= self.beacon_interval:
@@ -406,7 +413,8 @@ class MACLayer:
                     if self.current_packet.retry_count >= self.max_retries:
                         # Max retries exceeded, drop packet
                         self.stats['tx_failed'] += 1
-                        self.queue.popleft()  # Remove from queue
+                        if len(self.queue) > 0 and self.queue[0] == self.current_packet:
+                            self.queue.popleft()  # Remove from queue
                         self.current_packet = None
                         self.pending_ack = None
                         self.reset_backoff()
@@ -417,6 +425,12 @@ class MACLayer:
                         self.state = MACState.BACKOFF
                         self.backoff_timer = current_time + (self.backoff_counter * self.slot_time)
             # ACK received is handled in process_received_packet
+            elif self.pending_ack is None:
+                # ACK was received (handled in process_received_packet)
+                # Remove packet from queue
+                if len(self.queue) > 0 and self.current_packet and self.queue[0] == self.current_packet:
+                    self.queue.popleft()
+                self.current_packet = None
         
         elif self.state == MACState.TRANSMITTING:
             # Transmission complete
@@ -427,16 +441,13 @@ class MACLayer:
                 else:
                     # Other packet types (RTS, CTS, ACK, BEACON) complete
                     self.state = MACState.IDLE
-                    if self.current_packet and self.current_packet.packet_type == PacketType.DATA:
-                        # Remove from queue if it was a data packet
-                        if len(self.queue) > 0:
-                            self.queue.popleft()
                     self.current_packet = None
         
         elif self.state == MACState.SENDING_ACK:
             # ACK transmission complete
             if current_time >= self.channel_busy_until:
                 self.state = MACState.IDLE
+                self.current_packet = None
         
         return packets_to_transmit
 
