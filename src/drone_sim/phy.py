@@ -226,28 +226,120 @@ def assign_formation(drones, formation="line", spacing=50):
 # ==========================================================
 # Dynamic Leader Handoff
 # ==========================================================
-def dynamic_leader_handoff(drones, battery_threshold=300):
+def dynamic_leader_handoff(drones, battery_threshold=300, min_neighbors=2, hysteresis=50):
+    """Select a new leader if current one is weak or disconnected."""
     leader = drones[0]
+    # Conditions for handoff: low energy or poor connectivity
+    needs_handoff = (
+        (leader.energy <= battery_threshold) or
+        (len(leader.neighbors) < min_neighbors)
+    )
 
-    if leader.energy > battery_threshold and len(leader.neighbors) >= 1:
-        return  # no handoff
+    # Hysteresis: avoid flapping near threshold
+    if not needs_handoff and leader.energy > (battery_threshold + hysteresis):
+        return
 
-    print("\n[Leader Handoff Triggered] Leader too weak or disconnected")
+    print("\n[Leader Handoff Triggered] Leader weak/disconnected")
 
+    # Candidates: online, reasonably connected
     candidates = [d for d in drones if d.online]
-    candidates.sort(key=lambda d: (d.energy, len(d.neighbors)), reverse=True)
+    if not candidates:
+        print("[Leader Handoff] No candidates available")
+        return
 
+    # Score: energy, connectivity, centrality (distance to centroid)
+    cx = sum(d.position[0] for d in candidates) / len(candidates)
+    cy = sum(d.position[1] for d in candidates) / len(candidates)
+
+    def score(d):
+        return (
+            0.6 * d.energy +                    # prioritize battery
+            0.3 * len(d.neighbors) -            # prioritize connectivity
+            0.1 * math.hypot(d.position[0] - cx, d.position[1] - cy)  # centrality
+        )
+
+    candidates.sort(key=score, reverse=True)
     new_leader = candidates[0]
+
+    if new_leader.id == leader.id:
+        return  # same leader
+
+    # Swap positions in the list to keep drones[0] as the leader
     idx_old = drones.index(leader)
     idx_new = drones.index(new_leader)
-
     drones[idx_old], drones[idx_new] = drones[idx_new], drones[idx_old]
 
+    # Update roles
     drones[0].role = "leader"
     for d in drones[1:]:
         d.role = "follower"
 
     print(f"[Leader Handoff] New leader is Drone {drones[0].id}")
+
+# ==========================================================
+# Formation Control Laws (PD + consensus + avoidance)
+# ==========================================================
+def formation_control_update(drones, dt, kp=0.25, kd=0.40, vmax=3.0, avoid_gain=0.5, avoid_radius=20.0, consensus_weight=0.2):
+    """Update follower velocities to maintain stable formation relative to leader."""
+    if not drones or not drones[0].online:
+        return
+    leader = drones[0]
+
+    # Leader velocity can be set externally (mission plan)
+    # Example: constant forward motion
+    # leader.velocity is assumed already set before calling this function
+
+    for d in drones[1:]:
+        if not d.online:
+            continue
+
+        # Desired position relative to leader
+        dx_off, dy_off = d.formation_offset
+        target_x = leader.position[0] - dx_off
+        target_y = leader.position[1] + dy_off
+
+        # Errors
+        ex = target_x - d.position[0]
+        ey = target_y - d.position[1]
+
+        # PD control (damping uses drone's current velocity)
+        ux = kp * ex - kd * d.velocity[0]
+        uy = kp * ey - kd * d.velocity[1]
+
+        # Consensus term: align with average of neighbors to reduce drift
+        if d.neighbors:
+            nx = 0.0
+            ny = 0.0
+            count = 0
+            for nid in d.neighbors:
+                n = next(dr for dr in drones if dr.id == nid)
+                nx += n.position[0]
+                ny += n.position[1]
+                count += 1
+            nx /= count
+            ny /= count
+            # Pull slightly toward neighbor centroid
+            ux += consensus_weight * (nx - d.position[0])
+            uy += consensus_weight * (ny - d.position[1])
+
+        # Collision avoidance: repulsion from too-close neighbors
+        for nid in d.neighbors:
+            n = next(dr for dr in drones if dr.id == nid)
+            r = math.hypot(n.position[0] - d.position[0], n.position[1] - d.position[1])
+            if r < avoid_radius and r > 1e-6:
+                rx = (d.position[0] - n.position[0]) / r
+                ry = (d.position[1] - n.position[1]) / r
+                ux += avoid_gain * rx * (avoid_radius - r) / avoid_radius
+                uy += avoid_gain * ry * (avoid_radius - r) / avoid_radius
+
+        # Velocity saturation for stability and energy efficiency
+        speed = math.hypot(ux, uy)
+        if speed > vmax:
+            ux *= vmax / speed
+            uy *= vmax / speed
+
+        d.velocity = [ux, uy]
+
 
 # ==========================================================
 # Network Simulation Loop
@@ -261,20 +353,24 @@ def run_simulation(drones, steps=10, dt=1.0):
     for step in range(steps):
         print(f"\n--- Step {step + 1} ---")
 
-        # Leader moves forward; followers maintain relative offsets
+        # Leader mission plan (you can vary over time)
         leader = drones[0]
-        leader.velocity = [1.0, 0.0]  # move in +x direction
+        leader.velocity = [1.5, 0.0]  # forward motion
         leader.move(dt)
 
-        for drone in drones[1:]:
-            # Maintain formation relative to leader
-            dx, dy = drone.formation_offset
-            target_x = leader.position[0] - dx
-            target_y = leader.position[1] + dy
-            vx = (target_x - drone.position[0]) * 0.1
-            vy = (target_y - drone.position[1]) * 0.1
-            drone.velocity = [vx, vy]
-            drone.move(dt)
+        # Refresh neighbors before control (needed for consensus/avoidance)
+        for d in drones:
+            d.discover_neighbors(drones)
+
+        # Formation control (stable PD + consensus + avoidance)
+        formation_control_update(drones, dt)
+
+        # Move followers after updating control velocities
+        for d in drones[1:]:
+            d.move(dt)
+
+        # Periodic leader handoff (e.g., every step; you can do every N steps)
+        dynamic_leader_handoff(drones, battery_threshold=300, min_neighbors=2, hysteresis=50)
 
         # Communication phase
         for drone in drones:
@@ -308,14 +404,14 @@ def run_simulation(drones, steps=10, dt=1.0):
 # Example Usage (Static + Formation Example)
 # ==========================================================
 if __name__ == "__main__":
-    N = 12  # scalable to 100+
-    drones = []
+    N = int(input("Enter number of drones: "))
+    formation = input("Enter formation (line, v, grid, square): ")
+    spacing = int(input("Enter spacing between drones: "))
 
-    for i in range(N):
-        drones.append(Drone(i + 1, i * 20, 0, "802.11ac"))
-
-    assign_formation(drones, formation="v", spacing=50)
+    drones = [Drone(i + 1, i * 20, 0, "802.11ac") for i in range(N)]
+    assign_formation(drones, formation=formation, spacing=spacing)
     run_simulation(drones, steps=12, dt=1.0)
+
 
 # ==========================================================
 # Future / To-Do Notes (kept and extended)
@@ -333,6 +429,7 @@ if __name__ == "__main__":
 #   - Implement buffering for disconnection tolerance (drop policy)
 #
 # Formation Control:
+#   - Can chose the formation and amount of drones.
 #   - formations: grid / square / V / line
 #   - leader-follower structure with formation offsets
 #   - speed, velocity (vx, vy), and global speed scaling
@@ -348,5 +445,8 @@ if __name__ == "__main__":
 #   - Basic mobility and formation control
 #
 # Next Steps (Recommended):
+#   - Add dynamic leader handoff
+#   - Integrate control laws for formation stability
+#
+# New Next Step:
 #   - Add dynamic link-quality estimator (RSSI/SNR model)
-
