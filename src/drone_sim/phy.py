@@ -404,9 +404,9 @@ def run_simulation(drones, steps=10, dt=1.0):
 # Example Usage (Static + Formation Example)
 # ==========================================================
 if __name__ == "__main__":
-    N = int(input("Enter number of drones: "))
-    formation = input("Enter formation (line, v, grid, square): ")
-    spacing = int(input("Enter spacing between drones: "))
+    N = int(input("Enter number of drones: ")) # whole numbers only max 100
+    formation = input("Enter formation (line, v, grid, square): ") # respond with word as shown
+    spacing = int(input("Enter spacing between drones: ")) # whole numbers only
 
     drones = [Drone(i + 1, i * 20, 0, "802.11ac") for i in range(N)]
     assign_formation(drones, formation=formation, spacing=spacing)
@@ -450,3 +450,4 @@ if __name__ == "__main__":
 #
 # New Next Step:
 #   - Add dynamic link-quality estimator (RSSI/SNR model)
+
